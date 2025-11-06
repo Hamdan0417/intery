@@ -827,3 +827,182 @@ function ads_true_load_comments(){
 add_action('wp_ajax_loadcomments', 'ads_true_load_comments');
 add_action('wp_ajax_nopriv_loadcomments', 'ads_true_load_comments');
 
+add_filter( 'the_content', 'elgreco_append_depay_payment_button' );
+add_action( 'wp_enqueue_scripts', 'elgreco_maybe_configure_depay_assets', 20 );
+
+function elgreco_depay_enable_manual_render() {
+
+    $GLOBALS['elgreco_depay_manual_render'] = true;
+}
+
+function elgreco_depay_is_manual_render_enabled() {
+
+    return ! empty( $GLOBALS['elgreco_depay_manual_render'] );
+}
+
+function elgreco_render_depay_payment_section() {
+
+    if ( ! elgreco_should_render_depay_button() ) {
+        return;
+    }
+
+    $markup = elgreco_get_depay_payment_section_markup();
+
+    if ( empty( $markup ) ) {
+        return;
+    }
+
+    echo $markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- already escaped in generator
+}
+
+function elgreco_append_depay_payment_button( $content ) {
+
+    if ( is_admin() || ! is_page() || ! in_the_loop() || ! is_main_query() || elgreco_depay_is_manual_render_enabled() ) {
+        return $content;
+    }
+
+    $page = get_queried_object();
+
+    if ( ! elgreco_is_depay_payment_page( $page ) ) {
+        return $content;
+    }
+
+    $button_markup = elgreco_get_depay_payment_section_markup();
+
+    if ( empty( $button_markup ) ) {
+        return $content;
+    }
+
+    return $content . $button_markup;
+}
+
+function elgreco_maybe_configure_depay_assets() {
+
+    if ( ! elgreco_should_render_depay_button() ) {
+        return;
+    }
+
+    if ( ! wp_script_is( 'depay-payments-widgets', 'enqueued' ) ) {
+        return;
+    }
+
+    $config = apply_filters(
+        'elgreco_depay_minikit_configuration',
+        array(
+            'appId'     => 'c18fa65a-021c-426c-bc3d-06c06a315d4c',
+            'appSecret' => 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        )
+    );
+
+    if ( empty( $config['appId'] ) ) {
+        return;
+    }
+
+    $script = sprintf(
+        "window.ElGrecoDePay = window.ElGrecoDePay || {};\nwindow.ElGrecoDePay.miniKit = %s;\n(function(){\n  var appId = window.ElGrecoDePay.miniKit.appId;\n  function install(){\n    if (window.MiniKit && typeof window.MiniKit.install === 'function') {\n      window.MiniKit.install(appId);\n      return true;\n    }\n    return false;\n  }\n  if (!install()) {\n    var attempts = 0;\n    var interval = setInterval(function(){\n      attempts++;\n      if (install() || attempts >= 25) {\n        clearInterval(interval);\n      }\n    }, 200);\n  }\n})();",
+        wp_json_encode( array(
+            'appId'     => $config['appId'],
+            'appSecret' => isset( $config['appSecret'] ) ? $config['appSecret'] : '',
+        )
+    )
+    );
+
+    wp_add_inline_script( 'depay-payments-widgets', $script );
+}
+
+function elgreco_should_render_depay_button() {
+
+    if ( is_admin() ) {
+        return false;
+    }
+
+    if ( ! is_page() ) {
+        return false;
+    }
+
+    $page = get_queried_object();
+
+    return elgreco_is_depay_payment_page( $page );
+}
+
+function elgreco_is_depay_payment_page( $page ) {
+
+    if ( ! $page instanceof \WP_Post ) {
+        return false;
+    }
+
+    $eligible_slugs = apply_filters(
+        'elgreco_depay_payment_page_slugs',
+        array( 'payment-methods', 'checkout', 'shopping-cart', 'checkout-details' )
+    );
+
+    return in_array( $page->post_name, $eligible_slugs, true );
+}
+
+function elgreco_get_depay_payment_section_markup() {
+
+    static $cached_markup = null;
+
+    if ( null !== $cached_markup ) {
+        return $cached_markup;
+    }
+
+    if ( ! class_exists( '\\DePay_Payments_Block' ) ) {
+        if ( current_user_can( 'manage_options' ) ) {
+            $cached_markup = sprintf(
+                '<p class="payment-method payment-method--depay-notice">%s</p>',
+                esc_html__( 'Activate the DePay plugin to display crypto payments on this page.', 'elgreco' )
+            );
+        } else {
+            $cached_markup = '';
+        }
+
+        return $cached_markup;
+    }
+
+    $configured_payments = get_option( 'DePay_payments_accepted_payments' );
+
+    if ( empty( $configured_payments ) ) {
+        if ( current_user_can( 'manage_options' ) ) {
+            $cached_markup = sprintf(
+                '<p class="payment-method payment-method--depay-notice">%s</p>',
+                esc_html__( 'Configure the DePay plugin to enable crypto payments.', 'elgreco' )
+            );
+        } else {
+            $cached_markup = '';
+        }
+
+        return $cached_markup;
+    }
+
+    $attributes = apply_filters(
+        'elgreco_depay_payment_block_attributes',
+        array(
+            'widgetTitle'       => __( 'Pay with crypto', 'elgreco' ),
+            'buttonLabel'       => __( 'Pay with crypto', 'elgreco' ),
+            'paymentAmountType' => 'free',
+        )
+    );
+
+    $button_markup = \DePay_Payments_Block::render_block( $attributes );
+
+    if ( empty( $button_markup ) ) {
+        $cached_markup = '';
+
+        return $cached_markup;
+    }
+
+    $heading = apply_filters(
+        'elgreco_depay_payment_heading',
+        __( 'Web3 payments', 'elgreco' )
+    );
+
+    $cached_markup = sprintf(
+        '<section class="payment-method payment-method--depay"><h2 class="payment-method__title">%1$s</h2>%2$s</section>',
+        esc_html( $heading ),
+        $button_markup
+    );
+
+    return $cached_markup;
+}
+
