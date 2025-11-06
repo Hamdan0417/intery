@@ -827,3 +827,66 @@ function ads_true_load_comments(){
 add_action('wp_ajax_loadcomments', 'ads_true_load_comments');
 add_action('wp_ajax_nopriv_loadcomments', 'ads_true_load_comments');
 
+add_filter( 'the_content', 'elgreco_append_depay_payment_button' );
+
+function elgreco_append_depay_payment_button( $content ) {
+
+    if ( is_admin() || ! is_page() || ! in_the_loop() || ! is_main_query() ) {
+        return $content;
+    }
+
+    $page = get_queried_object();
+
+    if ( ! $page instanceof \WP_Post ) {
+        return $content;
+    }
+
+    $eligible_slugs = apply_filters(
+        'elgreco_depay_payment_page_slugs',
+        array( 'payment-methods', 'checkout' )
+    );
+
+    if ( empty( $eligible_slugs ) || ! in_array( $page->post_name, $eligible_slugs, true ) ) {
+        return $content;
+    }
+
+    if ( ! class_exists( '\\DePay_Payments_Block' ) ) {
+        if ( current_user_can( 'manage_options' ) ) {
+            $content .= sprintf(
+                '<p class="payment-method payment-method--depay-notice">%s</p>',
+                esc_html__( 'Activate the DePay plugin to display crypto payments on this page.', 'elgreco' )
+            );
+        }
+
+        return $content;
+    }
+
+    $attributes = apply_filters(
+        'elgreco_depay_payment_block_attributes',
+        array(
+            'widgetTitle'        => __( 'Pay with crypto', 'elgreco' ),
+            'buttonLabel'        => __( 'Pay with crypto', 'elgreco' ),
+            'paymentAmountType'  => 'free',
+        )
+    );
+
+    $button_markup = \DePay_Payments_Block::render_block( $attributes );
+
+    if ( empty( $button_markup ) ) {
+        return $content;
+    }
+
+    $heading = apply_filters(
+        'elgreco_depay_payment_heading',
+        __( 'Web3 payments', 'elgreco' )
+    );
+
+    $content .= sprintf(
+        '<section class="payment-method payment-method--depay"><h2 class="payment-method__title">%1$s</h2>%2$s</section>',
+        esc_html( $heading ),
+        $button_markup
+    );
+
+    return $content;
+}
+
