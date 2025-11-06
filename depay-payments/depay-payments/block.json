@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 2,
+  "name": "depay-payments/block",
+  "title": "DePay",
+  "category": "widgets",
+  "description": "Accept Web3 Crypto Payments & Donations. Supports various tokens, blockchains and wallets. MetaMask, Phantom, USDC, USDT, ETH, SOL, BSC, POL, xDAI…",
+  "keywords": [ "payments", "crypto", "web3", "DePay", "USDC" ],
+  "version": "3.1.4",
+  "textdomain": "depay-payments",
+  "example": {},
+  "editorScript": "depay-payments-script",
+  "supports": {
+    "align": ["left", "right", "center"],
+    "spacing": {
+      "margin": true,
+      "padding": true
+    }
+  },
+  "attributes": {
+    "align": {
+      "type": "string",
+      "default": "center"
+    }
+  }
+}
