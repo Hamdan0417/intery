@@ -843,10 +843,15 @@ function elgreco_append_depay_payment_button( $content ) {
 
     $eligible_slugs = apply_filters(
         'elgreco_depay_payment_page_slugs',
-        array( 'payment-methods', 'checkout' )
+        array( 'payment-methods', 'checkout', 'shopping-cart', 'checkout-details' )
     );
 
-    if ( empty( $eligible_slugs ) || ! in_array( $page->post_name, $eligible_slugs, true ) ) {
+    $is_cart_like_page = function_exists( 'is_cart' ) && is_cart();
+    $is_checkout_like_page = function_exists( 'is_checkout' ) && is_checkout();
+
+    $is_eligible = in_array( $page->post_name, $eligible_slugs, true ) || $is_cart_like_page || $is_checkout_like_page;
+
+    if ( ! $is_eligible ) {
         return $content;
     }
 
